@@ -1,6 +1,7 @@
 package io.security_JWT.backend.admin.api;
 import io.security_JWT.backend.admin.app.AdminService;
 import io.security_JWT.backend.admin.dto.LoginRequestDto;
+import io.security_JWT.backend.admin.dto.RefreshTokenRequestDto;
 import io.security_JWT.backend.admin.dto.SingUpRequestDto;
 import io.security_JWT.backend.admin.unit.BaseResponse;
 import jakarta.servlet.http.HttpServletResponse;
@@ -21,22 +22,22 @@ public class AdminController {
     private final AdminService adminService;
 
     @PostMapping("/signup")
-    public ResponseEntity<BaseResponse<?>> signup(@RequestBody SingUpRequestDto singUpRequestDto) {
-        return adminService.save(singUpRequestDto);
+    public ResponseEntity<BaseResponse<?>> signup(@RequestBody SingUpRequestDto signUpRequestDto) {
+        return adminService.save(signUpRequestDto);
     }
 
 
     //반환으로 헤더에 토큰값을 넣어줘야 하니깐 HttpServletResponse
     @PostMapping("/login")
     public ResponseEntity<BaseResponse<?>> login(@RequestBody LoginRequestDto loginRequestDto , HttpServletResponse response) {
-       return adminService.login(loginRequestDto, response);
+        return adminService.login(loginRequestDto, response);
 
     }
 
-
+    //https로 사용한다 가정하에 body값으로 refresh token을 전송
     @PostMapping("/admin/logout")
-    public ResponseEntity<BaseResponse<?>> logout(@RequestHeader("Authorization") String accessToken) { //헤더에서 가져옴
-        return adminService.logout(accessToken);
+    public ResponseEntity<BaseResponse<?>> logout(@RequestHeader("Authorization") String accessToken, @RequestBody RefreshTokenRequestDto refreshTokenRequestDto) { //헤더에서 가져옴
+        return adminService.logout(accessToken, refreshTokenRequestDto);
     }
 
 
