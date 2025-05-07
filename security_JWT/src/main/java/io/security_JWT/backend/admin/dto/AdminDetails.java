@@ -19,7 +19,7 @@ import java.util.List;
 @NoArgsConstructor
 //구현 필수 메서드
 public class AdminDetails implements UserDetails {
-
+    private Long id;
     private String email;
     private String password;
     private Role role;
