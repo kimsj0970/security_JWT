@@ -36,7 +36,7 @@ public class AdminController {
 
     //https로 사용한다 가정하에 body값으로 refresh token을 전송
     @PostMapping("/admin/logout")
-    public ResponseEntity<BaseResponse<?>> logout(@RequestHeader("Authorization") String accessToken, @RequestBody RefreshTokenRequestDto refreshTokenRequestDto) { //헤더에서 가져옴
+    public ResponseEntity<BaseResponse<?>> logout(@RequestHeader("Authorization") String accessToken, @RequestBody RefreshTokenRequestDto refreshTokenRequestDto) {
         return adminService.logout(accessToken, refreshTokenRequestDto);
     }
 

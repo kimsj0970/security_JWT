@@ -34,6 +34,7 @@ public class AdminDetails implements UserDetails {
 
     public static AdminDetails AdminDetailsMake(Admin findAdmin) {
         AdminDetails adminDetails = new AdminDetails();
+        adminDetails.id = findAdmin.getId();
         adminDetails.email = findAdmin.getEmail();
         adminDetails.password = findAdmin.getPassword();
         adminDetails.role = findAdmin.getRole();
