@@ -34,7 +34,7 @@ public class SecurityConfig {
 
                 .cors(cors -> cors.configurationSource(request -> {
                     CorsConfiguration config = new CorsConfiguration();
-                    //config.setAllowedOrigins(List.of("http://localhost:5173")); // ✅ 프론트엔드 도메인
+                    config.setAllowedOrigins(List.of("http://localhost:5173")); // ✅ 프론트엔드 도메인
                     config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
                     config.setAllowedHeaders(List.of("*"));
                     config.setExposedHeaders(List.of("Authorization", "Refresh")); //
