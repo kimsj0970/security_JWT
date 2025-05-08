@@ -36,7 +36,7 @@ public class AdminService {
     //BaseResponse로 지정한 내용에 http 상태 코드를 수정 후 다시 ResponseEntity로 감싸서 보냄
     public ResponseEntity<BaseResponse<?>> save(SingUpRequestDto dto) {
         if (adminRepository.findByEmail(dto.getEmail()).isPresent()) {
-            return BaseResponse.error("이미 존재하는 이메일입니다.", HttpStatus.CONFLICT); //409 반환
+            return BaseResponse.error("이미 존재하는 이메일입니다.", HttpStatus.UNAUTHORIZED); //401 반환 (409 숨기기)
         }
 
         Admin admin = Admin.builder()

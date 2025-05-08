@@ -2,9 +2,10 @@ package io.security_JWT.backend.admin.dto;
 
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-@Data
+@Getter
 @RequiredArgsConstructor
 public class SingUpRequestDto {
     private final String email;
