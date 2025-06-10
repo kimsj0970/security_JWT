@@ -7,6 +7,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
 import io.security_JWT.backend.user.adapter.UserDetail;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 
 //알아서 user 정보 추출
 
@@ -24,4 +26,17 @@ public class UserContextService {
         UserDetail userDetail = (UserDetail)auth.getPrincipal();
         return userDetail.getId();  // user ID 반환
     }
+
+    // 쿠키에서 refresh token을 가져옴
+    public String extractRefreshTokenFromCookie(HttpServletRequest request) {
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if ("refreshToken".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+        return null;
+    }
+
 }
