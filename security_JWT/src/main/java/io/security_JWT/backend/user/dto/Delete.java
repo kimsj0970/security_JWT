@@ -4,5 +4,5 @@ import lombok.Builder;
 
 @Builder
 
-public record Delete(String refreshToken, String email, String password) {
+public record Delete(String email, String password) {
 }

@@ -5,7 +5,7 @@ import io.security_JWT.backend.global.exception.BusinessException;
 import io.security_JWT.backend.global.exception.domain.ErrorCode;
 import io.security_JWT.backend.user.adapter.UserDetail;
 import io.security_JWT.backend.user.dto.TokenBody;
-import io.security_JWT.backend.user.repository.BlackListRepository;
+//import io.security_JWT.backend.user.repository.BlackListRepository;
 import io.security_JWT.backend.user.app.UserService;
 import io.security_JWT.backend.user.app.JwtTokenProvider;
 import jakarta.servlet.FilterChain;
@@ -28,13 +28,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     //토큰 제공자
     private final JwtTokenProvider jwtTokenProvider;
     private final UserService userService;
-    private final BlackListRepository blackListRepository;
+    //private final BlackListRepository blackListRepository;
 
-    public JwtAuthFilter(JwtTokenProvider jwtTokenProvider, UserService userService,
-        BlackListRepository blackListRepository) {
+    public JwtAuthFilter(JwtTokenProvider jwtTokenProvider, UserService userService
+        // ,BlackListRepository blackListRepository
+    ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userService = userService;
-        this.blackListRepository = blackListRepository;
+        //this.blackListRepository = blackListRepository;
     }
 
     @Override
@@ -48,12 +49,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = resolveToken(request); //헤더에서 토큰값 추출
 
-        // 블랙리스트에 등록된 토큰인지 먼저 검사
-        if (blackListRepository.findByInversionAccessToken(token)
-            .filter(blacklist -> blacklist.getExpiration().after(new Date()))
-            .isPresent()) { // 요청한 access 토큰값이 블랙리스트에 있으며 블랙리스트에 해당 토큰 만료 시간이 유효하면 true가 되어 차단함
-            throw new JwtException("이 토큰은 블랙리스트에 등록되어 있으므로 사용할 수 없습니다.");
-        }
+        // // 블랙리스트에 등록된 토큰인지 먼저 검사
+        // if (blackListRepository.findByInversionAccessToken(token)
+        //     .filter(blacklist -> blacklist.getExpiration().after(new Date()))
+        //     .isPresent()) { // 요청한 access 토큰값이 블랙리스트에 있으며 블랙리스트에 해당 토큰 만료 시간이 유효하면 true가 되어 차단함
+        //     throw new JwtException("이 토큰은 블랙리스트에 등록되어 있으므로 사용할 수 없습니다.");
+        // }
 
         if (token != null && jwtTokenProvider.validate(token)) {
 

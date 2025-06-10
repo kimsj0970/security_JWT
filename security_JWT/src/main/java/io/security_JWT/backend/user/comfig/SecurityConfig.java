@@ -1,6 +1,6 @@
 package io.security_JWT.backend.user.comfig;
 
-import io.security_JWT.backend.user.repository.BlackListRepository;
+//import io.security_JWT.backend.user.repository.BlackListRepository;
 import io.security_JWT.backend.user.app.UserService;
 import io.security_JWT.backend.user.app.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -27,10 +27,11 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
         JwtTokenProvider jwtTokenProvider,
-        UserService userService,
-        BlackListRepository blackListRepository
+        UserService userService
+        //, BlackListRepository blackListRepository
     ) throws Exception {
-        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtTokenProvider, userService, blackListRepository);
+        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtTokenProvider, userService //, blackListRepository
+        );
 
         return http
             .formLogin(form -> form.disable())
@@ -49,7 +50,8 @@ public class SecurityConfig {
             .httpBasic(httpBasic -> httpBasic.disable())
             .authorizeHttpRequests(auth -> {
                 auth
-                    .requestMatchers("/user/login", "/user/signup", "/user/logout").permitAll()
+                    ///reissue-token을 호출하는 시점에는 엑세스 토큰이 이미 만료되어 있으니 넣어야 함
+                    .requestMatchers("/user/login", "/user/signup", "/user/reissue-token").permitAll()
                     .requestMatchers("/admin/**").hasRole("ADMIN")
                     // .requestMatchers(HttpMethod.GET, "/books/**").permitAll()
                     // 책의 get 요청은 권한 없는 사람들도 접근 가능하게 하는 예시

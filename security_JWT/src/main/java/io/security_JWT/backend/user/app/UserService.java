@@ -5,23 +5,27 @@ import io.security_JWT.backend.global.exception.BusinessException;
 import io.security_JWT.backend.global.exception.domain.ErrorCode;
 import io.security_JWT.backend.user.adapter.UserDetail;
 import io.security_JWT.backend.user.mapper.UserMapper;
-import io.security_JWT.backend.user.repository.BlackListRepository;
+//import io.security_JWT.backend.user.repository.BlackListRepository;
 import io.security_JWT.backend.user.repository.TokenRepository;
 import io.security_JWT.backend.user.domain.User;
-import io.security_JWT.backend.user.domain.BlackList;
+//import io.security_JWT.backend.user.domain.BlackList;
 import io.security_JWT.backend.user.domain.RefreshToken;
 import io.security_JWT.backend.user.dto.*;
 import io.security_JWT.backend.user.repository.UserRepository;
+import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -32,7 +36,10 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final TokenRepository tokenRepository;
-    private final BlackListRepository blackListRepository;
+    //private final BlackListRepository blackListRepository;
+    private final UserContextService userContextService;
+    private final StringRedisTemplate redisTemplate;
+
 
 
     //암호화 후 db에 회원가입 정보 저장
@@ -105,16 +112,32 @@ public class UserService {
 
         String accessToken = jwtTokenProvider.issueAccessToken(user.getId(), user.getRole(), user.getEmail());
 
-        //재발급 후 다시헤더에 넣어서 반환
-        LoginResponseDto loginResponseDto = new LoginResponseDto(accessToken, refreshToken);
-        response.setHeader("Authorization", "Bearer " + loginResponseDto.accessToken());
-        response.setHeader("Refresh", loginResponseDto.refreshToken());
+        // 위에서 발급한 accessToken redis에 저장
+        String key = "accessToken:" + user.getId();
+        // 토큰의 만료 시각 - 현재 시각 = 남은 시간으로 TTL을 계산하는 방식
+        long expiration = jwtTokenProvider.getExpiration(accessToken).getTime() - System.currentTimeMillis();
+        redisTemplate.opsForValue().set(key, accessToken, expiration, TimeUnit.MILLISECONDS);
+
+
+        // http only 쿠키 방식으로 refresh Token을 클라이언트에게 줌
+        Login login = new Login(accessToken, refreshToken);
+        response.setHeader("Authorization", "Bearer " + login.accessToken());
+        Cookie refreshCookie = new Cookie("refreshToken", login.refreshToken());
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setSecure(true);
+        //refreshCookie.setSecure(false); //http 방식이면
+        refreshCookie.setPath("/");
+        refreshCookie.setMaxAge(7 * 24 * 60 * 60); // 7일
+        response.addCookie(refreshCookie);
+
 
     }
 
     // Access Token 만료 시 Refresh Token으로 Accesss Token을 재발급하는 코드
     @Transactional
-    public void reissue(String refreshToken, HttpServletResponse response) {
+    public void reissue(HttpServletRequest request, HttpServletResponse response) {
+        String refreshToken = userContextService.extractRefreshTokenFromCookie(request);
+
         if (refreshToken.startsWith("Bearer ")) {
             refreshToken = refreshToken.substring(7);
         }
@@ -144,20 +167,40 @@ public class UserService {
             throw new IllegalArgumentException("RefreshToken 불일치 (위조 가능성!!!)");
         }
 
+
+        //redis에서 accessToken 삭제
+        String key = "accessToken:" + userId;
+        redisTemplate.delete(key);
+
+
         //Refresh token이 유효하지만 access token 재발급 용도로 사용 후
         //Refresh Token이 노출되었을 수 있기 때문에, 사용 후에는 새로운 것으로 갱신하는 것이 안전하다
         String newAccessToken = jwtTokenProvider.issueAccessToken(user.getId(), user.getRole(), user.getEmail());
+
+        //새로 발급한 accessToken으로 redis에 다시 저장
+        String newKey = "accessToken:" + userId;
+        long expiration = jwtTokenProvider.getExpiration(newAccessToken).getTime() - System.currentTimeMillis();
+        redisTemplate.opsForValue().set(newKey, newAccessToken, expiration, TimeUnit.MILLISECONDS);
+
+
         String newRefreshToken = jwtTokenProvider.issueRefreshToken(user.getId(), user.getRole(), user.getEmail());
 
         serverFindRefreshToken.newSetRefreshToken(newRefreshToken); // 새로 토큰을 발급 받아 기존 refresh token을 갱신
-        LoginResponseDto loginResponseDto = new LoginResponseDto(newAccessToken, newRefreshToken);// 클라이언트에게 보내줄 용도
+        Login login = new Login(newAccessToken, newRefreshToken);// 클라이언트에게 보내줄 용도
 
-        response.setHeader("Authorization", "Bearer " + loginResponseDto.accessToken());
-        response.setHeader("Refresh", loginResponseDto.refreshToken());
+        response.setHeader("Authorization", "Bearer " + login.accessToken());
+        Cookie refreshCookie = new Cookie("refreshToken", login.refreshToken());
+        refreshCookie.setHttpOnly(true);
+        refreshCookie.setSecure(true);
+        //refreshCookie.setSecure(false); //http 방식이면
+        refreshCookie.setPath("/");
+        refreshCookie.setMaxAge(7 * 24 * 60 * 60); // 7일
+        response.addCookie(refreshCookie);
     }
-
+    //로그아웃 = Redis에서 토큰 삭제
+    // 만료 = Redis의 TTL로 자연스럽게 만료됨
     @Transactional
-    public void logout(String accessToken, RefreshTokenRequestDto requestrefreshToken) {
+    public void logout(String accessToken, HttpServletRequest request, HttpServletResponse response) {
         //토큰 구조 먼저 확인
         if (accessToken.startsWith("Bearer ")) {
             accessToken = accessToken.substring(7);
@@ -175,20 +218,37 @@ public class UserService {
         }
         RefreshToken refreshToken = findrefreshToken.get();
 
-        if (!refreshToken.getRefreshToken().equals(requestrefreshToken.refreshToken())) {
+        String refreshTokenFromCookie = userContextService.extractRefreshTokenFromCookie(request);
+
+        if (!refreshToken.getRefreshToken().equals(refreshTokenFromCookie)) {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);  // 401 반환
         }
 
+        /// access Token을 블랙리스트 방식으로 사용 시 사용
         //토큰이 유효하다면, 이 토큰의 만료 시각을 가져온다. 블랙리스트에도 해당 만료 시간을 똑같이 넣어서 15분이면 15분 동안은 이 토큰을 사용하기 위해
-        Date expiration = jwtTokenProvider.getExpiration(
-            accessToken); //만료 시간 추출해서 현재 시간이 만료가 예정된 시간보다 작으면 그 토큰을 사용하지 못하게
-        blackListRepository.save(new BlackList(accessToken, expiration));
+        // Date expiration = jwtTokenProvider.getExpiration(
+        //     accessToken); //만료 시간 추출해서 현재 시간이 만료가 예정된 시간보다 작으면 그 토큰을 사용하지 못하게
+        // // blackListRepository.save(new BlackList(accessToken, expiration));
         tokenRepository.delete(refreshToken);
+
+        //redis에서 accessToken 삭제
+        String key = "accessToken:" + userId;
+        redisTemplate.delete(key);
+
+        // 쿠키 삭제 처리
+        Cookie cookie = new Cookie("refreshToken", null); // 이름 동일, 값은 null
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true); // HTTPS 환경
+        cookie.setMaxAge(0); // 즉시 만료
+        //cookie.setDomain("your-domain.com"); // 필요 시 설정
+        response.addCookie(cookie);
 
     }
 
     @Transactional
-    public void deleteUser(String accessToken, DeleteUserRequestDto deleteUserRequestDto) {
+    public void deleteUser(String accessToken, DeleteUserRequestDto deleteUserRequestDto
+        ,HttpServletRequest request, HttpServletResponse response) {
         //토큰 구조 먼저 확인
         if (accessToken.startsWith("Bearer ")) {
             accessToken = accessToken.substring(7);
@@ -213,7 +273,9 @@ public class UserService {
         if (tokenOptional.isEmpty()) {
             throw new BusinessException(INVALID_REFRESH_TOKEN);  //401
         }
-        if (!tokenOptional.get().getRefreshToken().equals(delete.refreshToken())) {
+
+        String refreshToken = userContextService.extractRefreshTokenFromCookie(request);
+        if (!tokenOptional.get().getRefreshToken().equals(refreshToken)) {
             throw new BusinessException(INVALID_REFRESH_TOKEN);  //401
         }
 
@@ -223,11 +285,24 @@ public class UserService {
         }
 
 
-        //refresh token 삭제
+        //refresh token DB에서 삭제
         List<RefreshToken> refreshTokens = tokenRepository.findAllByUserId(userId);
         tokenRepository.deleteAll(refreshTokens);
 
         //유저 삭제
         userRepository.findById(userId).ifPresent(userRepository::delete);
+
+        //redis에서 accessToken 삭제
+        String key = "accessToken:" + userId;
+        redisTemplate.delete(key);
+
+        // 쿠키 삭제 처리
+        Cookie cookie = new Cookie("refreshToken", null); // 이름 동일, 값은 null
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true); // HTTPS 환경
+        cookie.setMaxAge(0); // 즉시 만료
+        //cookie.setDomain("your-domain.com"); // 필요 시 설정
+        response.addCookie(cookie);
     }
 }

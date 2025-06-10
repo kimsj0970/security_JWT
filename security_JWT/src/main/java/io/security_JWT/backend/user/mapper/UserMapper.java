@@ -21,7 +21,6 @@ public class UserMapper {
 	public static Delete toDelete(DeleteUserRequestDto deleteUserRequestDto) {
 		return Delete.builder().email(deleteUserRequestDto.email())
 			.password(deleteUserRequestDto.password())
-			.refreshToken(deleteUserRequestDto.refreshToken())
 			.build();
 	}
 }
