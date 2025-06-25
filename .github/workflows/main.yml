@@ -10,6 +10,8 @@ jobs:
     #이 tagging 일은 우분투안에서 동작하며 표출되는 이름은 태깅
     name: 태깅
     runs-on: ubuntu-latest
+    permissions:
+      contents: write 
     steps:
       - uses: actions/checkout@v4
 
