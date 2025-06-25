@@ -1,0 +1,30 @@
+name: Security Service
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tagging:
+    #이 tagging 일은 우분투안에서 동작하며 표출되는 이름은 태깅
+    name: 태깅
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tag_version and tagging
+        id: tag_version
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: releasing
+        uses: ncipollo/release-action@v1
+        #전 단계에 out풋 값을 그대로 가져오고 태그를 달아주는
+        with:
+          #버전들이 이미 위에 단계에세 만들어졌으니 끝나고 나면 만들어지는 outputs에서 tag를 꺼냄
+          #새롭게 계산된 태그값이 들어가게 된다
+          tag: ${{steps.tag_version.outputs.new_tag}}
+          name: ${{steps.tag_version.outputs.new_tag}}
+          body: ${{steps.tag_version.outputs.changelog}}
