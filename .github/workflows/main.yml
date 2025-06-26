@@ -68,7 +68,7 @@ jobs:
           images: ${{env.REGISTRY}}/${{env.IMAGE_NAME}}
           tags: |
             type=sha
-            type=raw, value${{needs.tagging.outputs.tag.name}}
+            type=raw, value=${{needs.tagging.outputs.tag.name}}
             type=raw, value=latest
 #배포 될때마다 테그가 붙게 되는데 제일 최신의 값은 latest가 붙음 (sha는 그냥 식별자)
 
