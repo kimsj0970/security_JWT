@@ -122,13 +122,13 @@ public class UserService {
         // http only 쿠키 방식으로 refresh Token을 클라이언트에게 줌
         Login login = new Login(accessToken, refreshToken);
         response.setHeader("Authorization", "Bearer " + login.accessToken());
-        Cookie refreshCookie = new Cookie("refreshToken", login.refreshToken());
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(true);
-        //refreshCookie.setSecure(false); //http 방식이면
-        refreshCookie.setPath("/");
-        refreshCookie.setMaxAge(7 * 24 * 60 * 60); // 7일
-        response.addCookie(refreshCookie);
+        Cookie cookie = new Cookie("refreshToken", login.refreshToken());
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true); // HTTPS 환경
+        //cookie.setSecure(false); // HTTP 환경
+        cookie.setPath("/");
+        cookie.setMaxAge(7 * 24 * 60 * 60); // 7일
+        response.addCookie(cookie);
 
 
     }
@@ -189,13 +189,13 @@ public class UserService {
         Login login = new Login(newAccessToken, newRefreshToken);// 클라이언트에게 보내줄 용도
 
         response.setHeader("Authorization", "Bearer " + login.accessToken());
-        Cookie refreshCookie = new Cookie("refreshToken", login.refreshToken());
-        refreshCookie.setHttpOnly(true);
-        refreshCookie.setSecure(true);
-        //refreshCookie.setSecure(false); //http 방식이면
-        refreshCookie.setPath("/");
-        refreshCookie.setMaxAge(7 * 24 * 60 * 60); // 7일
-        response.addCookie(refreshCookie);
+        Cookie cookie = new Cookie("refreshToken", login.refreshToken());
+        cookie.setHttpOnly(true);
+        cookie.setSecure(true); // HTTPS 환경
+        //cookie.setSecure(false); // HTTP 환경
+        cookie.setPath("/");
+        cookie.setMaxAge(7 * 24 * 60 * 60); // 7일
+        response.addCookie(cookie);
     }
     //로그아웃 = Redis에서 토큰 삭제
     // 만료 = Redis의 TTL로 자연스럽게 만료됨
@@ -240,6 +240,7 @@ public class UserService {
         cookie.setPath("/");
         cookie.setHttpOnly(true);
         cookie.setSecure(true); // HTTPS 환경
+        //cookie.setSecure(false); // HTTP 환경
         cookie.setMaxAge(0); // 즉시 만료
         //cookie.setDomain("your-domain.com"); // 필요 시 설정
         response.addCookie(cookie);
@@ -301,6 +302,7 @@ public class UserService {
         cookie.setPath("/");
         cookie.setHttpOnly(true);
         cookie.setSecure(true); // HTTPS 환경
+        //cookie.setSecure(false); // HTTP 환경
         cookie.setMaxAge(0); // 즉시 만료
         //cookie.setDomain("your-domain.com"); // 필요 시 설정
         response.addCookie(cookie);
