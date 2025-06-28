@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -27,10 +29,12 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(
         HttpSecurity http,
         JwtTokenProvider jwtTokenProvider,
-        UserService userService
+        UserService userService,
+        StringRedisTemplate stringRedisTemplate
         //, BlackListRepository blackListRepository
-    ) throws Exception {
-        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtTokenProvider, userService //, blackListRepository
+
+    ) throws Exception { //예외가 발생할 수 있는 코드 뜻
+        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtTokenProvider, userService, stringRedisTemplate //, blackListRepository
         );
 
         return http
@@ -59,8 +63,7 @@ public class SecurityConfig {
                     .hasAnyRole("USER", "ADMIN"); //나머지 요청은 USER 또는 ADMiN 권한을 가져야 접근 가능
             })
 
-            .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
             .build();
     }
