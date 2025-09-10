@@ -1,5 +1,6 @@
 package io.security_JWT.backend.user.domain;
 
+import io.security_JWT.backend.global.unit.common.BaseEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -9,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class User {
+public class User extends BaseEntity {
 
     @Id
     @Column(name = "user_id")
@@ -48,8 +49,8 @@ public class User {
         this.phoneNumber = phone_number;
     }
 
-    // point 수정할 수 있도록 setter 추가
-    public void setPoint(Long point) {
+    // point 변경 메서드
+    public void updatePoint(Long point) {
         this.point = point;
     }
 

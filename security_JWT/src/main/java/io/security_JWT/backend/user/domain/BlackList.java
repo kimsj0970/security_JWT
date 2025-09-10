@@ -5,7 +5,7 @@
 //
 // import java.util.Date;
 //
-// //  "정상적으로 만료된 게 아니라, 강제로 로그아웃된 토큰" 을 저장하는 용도로 블랙리스트 사용
+// //  "정상적으로 만료된 게 아니라, 강제로 로그아웃된 토큰" 을 저장하는 용도로 블랙리스트 사용으로 "실시간 강제 만료가 필요한 경우에 사용"
 // @Entity
 // @Getter
 // @NoArgsConstructor(access = AccessLevel.PROTECTED)

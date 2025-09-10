@@ -2,13 +2,13 @@ package io.security_JWT.backend.user.app;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.security_JWT.backend.user.dto.TokenBody;
-import io.security_JWT.backend.user.repository.TokenRepository;
-import io.security_JWT.backend.user.comfig.JwtConfiguration;
+import io.security_JWT.backend.user.repository.RefreshTokenRedis;
 import io.security_JWT.backend.user.domain.RefreshToken;
 import io.security_JWT.backend.user.domain.Role;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.util.Date;
@@ -21,29 +21,42 @@ import java.util.Optional;
 public class JwtTokenProvider {
 
     //yml에서 가져옴
-    private final JwtConfiguration jwtConfiguration;
-    private final TokenRepository tokenRepository;
+    //private final JwtConfiguration jwtConfiguration;
+
+    @Value("${custom.jwt.exp-time.access}")
+    private long accessTokenTime;
+
+    @Value("${custom.jwt.exp-time.refresh}")
+    private long refreshTokenTime;
+
+    @Value("${custom.jwt.secrets.appkey}")
+    private String appkey;
+
+    @Value("${custom.jwt.secrets.originkey}")
+    private String originKey;
+
+
+    private final RefreshTokenRedis refreshTokenRedis;
 
     // JWT 토큰 서명에 쓰이는 비밀 키 문자열 생성
     private SecretKey getSecretKey() {
-        return Keys.hmacShaKeyFor(jwtConfiguration.getSecrets().getAppkey().getBytes());
+        return Keys.hmacShaKeyFor(appkey.getBytes());
     }
 
     //access 토큰 생성
     public String issueAccessToken(Long id, Role role, String email) {
-        return issueToken(id, role, jwtConfiguration.getExpTime().getAccess(), email);
+        return issueToken(id, role, accessTokenTime, email);
     }
 
     //refresh 토큰 생성
     public String issueRefreshToken(Long id, Role role, String email) {
-        return issueToken(id, role, jwtConfiguration.getExpTime().getRefresh(), email);
+        return issueToken(id, role, refreshTokenTime, email);
     }
 
-    //멤버가 가진 RefreshToken 가져오기
-    public Optional<RefreshToken> findRefreshToken(Long adminId) {
-        return tokenRepository.findTop1ByUserIdOrderByIdDesc(adminId);
-
-    }
+//    //멤버가 가진 RefreshToken 가져오기
+//    public Optional<RefreshToken> findRefreshToken(Long adminId) {
+//        return refreshTokenRedis.findTop1ByUserIdOrderByIdDesc(adminId);
+//    }
 
     //access & refresh 토큰 생성
     private String issueToken(Long id, Role role, Long expTime, String email) {
@@ -101,10 +114,10 @@ public class JwtTokenProvider {
         return new TokenBody(Long.parseLong(adminId), email, Role.valueOf(role));
     }
 
-    public Date getExpiration(String accessToken) {
+    public Date getExpiration(String token) {
         return Jwts.parser().verifyWith(getSecretKey())       // 서명 검증용 키 설정
             .build()                          // JwtParser로 build 후 파싱하여 추출
-            .parseSignedClaims(accessToken)   // JWT 파싱
+            .parseSignedClaims(token)           // JWT 파싱
             .getPayload()                     // Claims 객체 추출
             .getExpiration();                 // 만료 시간 추출
     }
