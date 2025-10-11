@@ -41,13 +41,10 @@ public class UserService {
 
 
 
-    @Value("${custom.jwt.exp-time.refresh}")
-    private int refreshTokenTime;
-
     //암호화 후 db에 회원가입 정보 저장
     //BaseResponse로 지정한 내용에 http 상태 코드를 수정 후 다시 ResponseEntity로 감싸서 보냄
     @Transactional
-    public void signup(SingUpRequestDto dto) {
+    public void signup(SingUpRequest dto) {
         if (userRepository.findByEmail(dto.email()).isPresent()) {
             throw new BusinessException(EMAIL_ALREADY_EXISTS);  //409
         }
@@ -58,46 +55,25 @@ public class UserService {
 
     //로그인
     @Transactional
-    public void login(LoginRequestDto dto, HttpServletResponse response) {
+    public void login(LoginRequest dto, HttpServletResponse response) {
 
-        //가입된 email과 password가 같은지 확인
-        Optional<User> findUser = userRepository.findByEmail(dto.email());
+        User user = userRepository.findByEmail(dto.email())
+            .filter(u -> passwordEncoder.matches(dto.password(), u.getPassword()))
+            .orElseThrow(() -> new BusinessException(LOGIN_USER_NOT_FOUND));
 
-        if (findUser.isEmpty()) {  //이메일이 존재하지 않다 반환 시 찾을 때까지 이메일 무한 입력 가능성이 있으니 404 반환
-            throw new BusinessException(ErrorCode.LOGIN_USER_NOT_FOUND); //404
-        }
+        String key = String.valueOf(user.getId());
 
-        User user = findUser.get();
+        //Redis & DB에 refreshToken 삭제
+        deleteTokenRedis(key);
+        refreshTokenRepository.deleteByUser(user);
 
-        if (!passwordEncoder.matches(dto.password(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.LOGIN_USER_NOT_FOUND);  //404
-        }
+        String accessToken  = jwtTokenProvider.issueAccessToken(user.getId(), user.getRole(), user.getEmail());
+        String refreshToken = jwtTokenProvider.issueRefreshToken(user.getId(), user.getRole(), user.getEmail());
 
-        //가입된 정보가 일치하고 db에 refreshToken이나 DB에 존재하고 있지만 기간 만료 시 다시 재발급
-
-        // Redis 조회
-        String refreshToken = getTokenRedis(String.valueOf(user.getId()));
-        // DB 조회
-        Optional<RefreshToken> dbToken = refreshTokenRepository.findRefreshTokenByUser(user);
-
-        if (refreshToken == null || !jwtTokenProvider.validate(refreshToken)) {
-            // Redis에 없거나 만료 → DB 유효 토큰 재사용 시도
-            if (dbToken.isPresent() && jwtTokenProvider.validate(dbToken.get().getRefreshToken())) {
-                refreshToken = dbToken.get().getRefreshToken();
-            } else {
-                // DB에도 없거나 만료시 새로 발급
-                refreshToken = jwtTokenProvider.issueRefreshToken(user.getId(), user.getRole(), user.getEmail());
-                dbToken.ifPresent(refreshTokenRepository::delete);
-                refreshTokenRepository.save(
-                    RefreshToken.builder().refreshToken(refreshToken).user(user).build()
-                );
-            }
-        }
-
-        String accessToken = jwtTokenProvider.issueAccessToken(user.getId(), user.getRole(), user.getEmail());
+        refreshTokenRepository.save(RefreshToken.builder().refreshToken(refreshToken).user(user).build());
 
         Duration ttlTime = ttlTime(refreshToken);
-        saveTokenRedis(String.valueOf(user.getId()), refreshToken, ttlTime);
+        saveTokenRedis(key, refreshToken, ttlTime);
 
         // http only 쿠키 방식으로 refresh Token을 클라이언트에게 줌
         response.setHeader("Authorization", "Bearer " + accessToken);
@@ -105,13 +81,13 @@ public class UserService {
 
     }
 
-    // Access Token 만료 시 Refresh Token으로 Accesss Token을 재발급하는 코드
+    // Access Token 만료 시 RefreshToken으로 AccesssToken을 재발급하는 코드
     @Transactional
     public void reissue(HttpServletRequest request, HttpServletResponse response, long userId) {
         // 쿠키에서 refreshToken 추출
         String refreshToken = userContextService.extractRefreshTokenFromCookie(request);
         if (refreshToken == null || refreshToken.isBlank()) throw new BusinessException(INVALID_REFRESH_TOKEN);
-        if (refreshToken.startsWith("Bearer ")) {refreshToken = refreshToken.substring(7);}
+
         // 토큰 유효성 확인 및 정보 추출 (사용자에 대한 권한이 아닌 토큰에 대한 유효성만 검사를 하므로 밑 부분처럼 추가 검사들이 필요합니다.)
         if (!jwtTokenProvider.validate(refreshToken)) {throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN); }  //401
 
@@ -123,24 +99,27 @@ public class UserService {
 
         //Redis, DB에 토큰 확인
         String serverToken = getTokenRedis(String.valueOf(user.getId()));
-        Optional<RefreshToken> dbToken = refreshTokenRepository.findRefreshTokenByUser(user);
+        Optional<RefreshToken> dbToken;
 
-        if (serverToken == null && dbToken.isPresent()) {
-            serverToken = dbToken.get().getRefreshToken();
-            if (serverToken == null) {
+
+        if (serverToken == null ) {
+            dbToken = refreshTokenRepository.findRefreshTokenByUser(user);
+            if (dbToken.isEmpty()) {
                 throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);    //401 //401 반환
             }
+            serverToken = dbToken.get().getRefreshToken();
         }
 
         //위에서 가져온 user 토큰 정보와 클라이언트가 요청으로 가져온 refreshToken이 같은지 다른지 확인해 위조 가능성을 체크
         if (serverToken == null || !serverToken.equals(refreshToken)) {
             throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);
         }
+
         //Redis & DB에 refreshToken 삭제
         deleteTokenRedis(String.valueOf(user.getId()));
-        dbToken.ifPresent(refreshTokenRepository::delete);
+        refreshTokenRepository.deleteByUser(user);
 
-        /*RefreshToken이 유효하지만 access token 재발급 용도로 사용 후
+        /*RefreshToken이 유효하지만 accessToken 재발급 용도로 사용 후
           RefreshToken이 노출되었을 수 있기 때문에, 사용 후에는 새로운 것으로 갱신하는 것이 안전하다 */
         String newAccessToken = jwtTokenProvider.issueAccessToken(user.getId(), user.getRole(), user.getEmail());
 
@@ -196,7 +175,7 @@ public class UserService {
     }
 
     @Transactional
-    public void deleteUser(String accessToken, DeleteUserRequestDto deleteUserRequestDto
+    public void deleteUser(String accessToken, DeleteUserRequest deleteUserRequest
         ,HttpServletRequest request, HttpServletResponse response, long userId) {
         //토큰 구조 먼저 확인
         if (accessToken.startsWith("Bearer ")) {
@@ -204,7 +183,6 @@ public class UserService {
         }
         if (!jwtTokenProvider.validate(accessToken)) {throw new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN);}
 
-        Delete delete = UserMapper.toDelete(deleteUserRequestDto);
 
         // 1. 유저 정보 추출
         User user = userRepository.findById(userId).orElseThrow(() -> new BusinessException(LOGIN_USER_NOT_FOUND));
@@ -213,7 +191,7 @@ public class UserService {
         User tokenUser = userRepository.findById(userId).orElseThrow(() -> new BusinessException(USER_NOT_FOUND));
 
         //이메일 비교
-        if (!delete.email().equals(tokenUser.getEmail())) {throw new BusinessException(ErrorCode.LOGIN_USER_NOT_FOUND); } // 404
+        if (!deleteUserRequest.email().equals(tokenUser.getEmail())) {throw new BusinessException(ErrorCode.LOGIN_USER_NOT_FOUND); } // 404
 
 
         //redis에 먼저 있는지 확인
@@ -223,7 +201,7 @@ public class UserService {
         if (serverToken == null && dbToken.isPresent()) {
             serverToken = dbToken.get().getRefreshToken();
             if (serverToken == null) {
-                throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);    //401 //401 반환
+                throw new BusinessException(ErrorCode.INVALID_REFRESH_TOKEN);    //401 반환
             }
         }
 
@@ -233,7 +211,7 @@ public class UserService {
         }
 
         //비밀번호 비교
-        if (!passwordEncoder.matches(delete.password(), tokenUser.getPassword())) {
+        if (!passwordEncoder.matches(deleteUserRequest.password(), tokenUser.getPassword())) {
             throw new BusinessException(ErrorCode.LOGIN_USER_NOT_FOUND);  //404
         }
 
@@ -299,5 +277,21 @@ public class UserService {
     }
 
 
+    public void userMoreInfo(String accessToken, UserInfoRequest userInfoRequest, HttpServletResponse response)
+        throws IOException {
+        //토큰 구조 먼저 확인
+        if (accessToken.startsWith("Bearer ")) {
+            accessToken = accessToken.substring(7);
+        }
+        if (!jwtTokenProvider.validate(accessToken)) {throw new BusinessException(ErrorCode.INVALID_ACCESS_TOKEN);}
+        TokenBody tokenBody = jwtTokenProvider.parseJwt(accessToken);
+        // 유저 정보 추출
+        User user = userRepository.findById(tokenBody.getUserId()).orElseThrow(() -> new BusinessException(LOGIN_USER_NOT_FOUND));
 
+        user.updateRole(Role.USER);
+        user.updatePhoneNumber(userInfoRequest.phoneNumber());
+
+        response.sendRedirect("/extra-info");
+
+    }
 }
